@@ -203,3 +203,16 @@ resource "aws_ecs_service" "notification" {
     container_port=3001
   }
 }
+
+# Docker Image (ECR)
+#         │
+#         ▼
+# Task Definition
+# (Blueprint describing how to run the container)
+#         │
+#         ▼
+# ECS Service
+# (Responsible for running and maintaining tasks)
+#         │
+#         ▼
+# Tasks (Running containers)

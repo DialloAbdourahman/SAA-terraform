@@ -125,7 +125,7 @@ resource "aws_efs_file_system" "efs" {
   creation_token = "chopme-efs"
 }
 
-resource "aws_efs_mount_target" "subnet_a" {
+resource "aws_efs_mount_target" "mount_target_in_subnet_a" {
   file_system_id  = aws_efs_file_system.efs.id
   subnet_id       = aws_subnet.subnet_az_1a.id
   security_groups = [aws_security_group.efs_sg.id]
@@ -133,7 +133,7 @@ resource "aws_efs_mount_target" "subnet_a" {
   depends_on = [aws_efs_file_system.efs]
 }
 
-resource "aws_efs_mount_target" "subnet_b" {
+resource "aws_efs_mount_target" "mount_target_in_subnet_b" {
   file_system_id  = aws_efs_file_system.efs.id
   subnet_id       = aws_subnet.subnet_az_1b.id
   security_groups = [aws_security_group.efs_sg.id]
@@ -149,7 +149,7 @@ resource "aws_instance" "web_server_az_a" {
   associate_public_ip_address = true
 
   user_data = templatefile("user-data.sh", {
-    efs_ip = aws_efs_mount_target.subnet_a.ip_address
+    efs_ip = aws_efs_mount_target.mount_target_in_subnet_a.ip_address
   })
 
   user_data_replace_on_change = true
@@ -158,7 +158,7 @@ resource "aws_instance" "web_server_az_a" {
     Name = "web_server_az_a"
   }
 
-  depends_on = [aws_efs_mount_target.subnet_a]
+  depends_on = [aws_efs_mount_target.mount_target_in_subnet_a]
 }
 
 resource "aws_instance" "web_server_az_b" {
@@ -169,7 +169,7 @@ resource "aws_instance" "web_server_az_b" {
   associate_public_ip_address = true
 
   user_data = templatefile("user-data.sh", {
-    efs_ip = aws_efs_mount_target.subnet_b.ip_address
+    efs_ip = aws_efs_mount_target.mount_target_in_subnet_b.ip_address
   })
 
   user_data_replace_on_change = true
@@ -178,11 +178,10 @@ resource "aws_instance" "web_server_az_b" {
     Name = "web_server_az_b"
   }
 
-  depends_on = [aws_efs_mount_target.subnet_b]
+  depends_on = [aws_efs_mount_target.mount_target_in_subnet_b]
 
 }
 
-// Just to show that we can have multiple instances in different subnets but same availability zone
 resource "aws_instance" "web_server_az_b_second" {
   ami           = "ami-0974a2c5ddf10f442"
   instance_type = "t3.micro"
@@ -191,7 +190,7 @@ resource "aws_instance" "web_server_az_b_second" {
   associate_public_ip_address = true
 
   user_data = templatefile("user-data.sh", {
-    efs_ip = aws_efs_mount_target.subnet_b.ip_address
+    efs_ip = aws_efs_mount_target.mount_target_in_subnet_b.ip_address
   })
 
   user_data_replace_on_change = true
@@ -200,7 +199,34 @@ resource "aws_instance" "web_server_az_b_second" {
     Name = "web_server_az_b_second"
   }
 
-  depends_on = [aws_efs_mount_target.subnet_b]
+  depends_on = [aws_efs_mount_target.mount_target_in_subnet_b]
 
 }
 
+# ===================================
+# EFS & Mount Targets — Quick Summary
+# ===================================
+
+# => EFS is a regional service. You create one EFS file system per region, and it can be accessed from any Availability Zone (AZ) in that region.
+# => A mount target is a network endpoint (ENI) created inside a specific subnet. It gets a private IP address that EC2 instances use to access the EFS.
+# => You can create only one mount target per AZ for a given EFS file system.
+# => Each mount target must be placed in a subnet because network interfaces (ENIs) must belong to a subnet.
+# => All subnets in the same AZ share that mount target. If you have multiple subnets in an AZ, they all use the same mount target IP.
+# => The VPC's automatic local route allows instances in different subnets to communicate, so an EC2 in another subnet of the same AZ can reach the mount target.
+# => For best performance and lower cost, create one mount target in every AZ where you run EC2 instances. Then each EC2 mounts EFS through the mount target in its own AZ, avoiding cross-AZ traffic.
+
+# Mental model:
+
+# One EFS (Region)
+#        │
+#        ├── Mount Target (AZ 1a) → IP 10.0.1.50
+#        │       ↑
+#        │       └── Used by all EC2s in AZ 1a
+#        │
+#        └── Mount Target (AZ 1b) → IP 10.0.2.75
+#                ↑
+#                └── Used by all EC2s in AZ 1b
+
+# => A simple way to remember it is:
+
+# => EFS stores the files, and mount targets provide the IP addresses that EC2 instances use to reach those files.
