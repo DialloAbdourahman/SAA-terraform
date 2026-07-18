@@ -112,13 +112,13 @@ resource "aws_vpc_security_group_ingress_rule" "allow_ssh_ipv4" {
   to_port           = 22
 }
 
-resource "aws_vpc_security_group_ingress_rule" "allow_http_temporal_for_tests" {
-  security_group_id = aws_security_group.ec2_sg.id
-  cidr_ipv4         = "0.0.0.0/0"
-  from_port         = 80
-  ip_protocol       = "tcp"
-  to_port           = 80
-}
+# resource "aws_vpc_security_group_ingress_rule" "allow_http_temporal_for_tests" {
+#   security_group_id = aws_security_group.ec2_sg.id
+#   cidr_ipv4         = "0.0.0.0/0"
+#   from_port         = 80
+#   ip_protocol       = "tcp"
+#   to_port           = 80
+# }
 
 resource "aws_vpc_security_group_egress_rule" "allow_all_ec2_outbound" {
   security_group_id = aws_security_group.ec2_sg.id
@@ -133,7 +133,7 @@ resource "aws_lb_target_group" "auth_service_tg" {
   vpc_id   = aws_vpc.myvpc.id
 
   health_check {
-    path = "/api/auth"
+    path = "/"
     port = "traffic-port"
   }
 }
