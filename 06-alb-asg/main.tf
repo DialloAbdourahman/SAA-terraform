@@ -132,6 +132,12 @@ resource "aws_lb_target_group" "auth_service_tg" {
   protocol = "HTTP"
   vpc_id   = aws_vpc.myvpc.id
 
+  # stickiness {
+  #   type            = "lb_cookie"
+  #   cookie_duration = 86400  # Time in seconds (1 day)
+  #   enabled         = true
+  # }
+
   health_check {
     path = "/"
     port = "traffic-port"
@@ -166,7 +172,7 @@ resource "aws_autoscaling_group" "auth_service_asg" {
   name                 = "auth-service-asg"
   max_size             = 4
   min_size             = 1
-  desired_capacity     = 2
+  desired_capacity     = 1
 
   launch_template {
     id      = aws_launch_template.auth_service_lt.id
@@ -187,6 +193,34 @@ resource "aws_autoscaling_group" "auth_service_asg" {
   health_check_grace_period = 10    
 
   force_delete = true  
+}
+
+resource "aws_autoscaling_policy" "auth_service_target_tracking" {
+  name                   = "auth-service-target-tracking"
+  autoscaling_group_name = aws_autoscaling_group.auth_service_asg.name
+
+  policy_type = "TargetTrackingScaling"
+
+  target_tracking_configuration {
+    predefined_metric_specification {
+
+      # Average CPU utilization across all EC2 instances
+      predefined_metric_type = "ASGAverageCPUUtilization"
+
+      # Average incoming network traffic (bytes/sec)
+      # predefined_metric_type = "ASGAverageNetworkIn"
+
+      # Average outgoing network traffic (bytes/sec)
+      # predefined_metric_type = "ASGAverageNetworkOut"
+
+      # Average requests per healthy target behind an ALB
+      # Requires: resource_label = "${aws_lb.main.arn_suffix}/${aws_lb_target_group.auth_service_tg.arn_suffix}"
+      # predefined_metric_type = "ALBRequestCountPerTarget"
+    }
+
+    target_value     = 50.0
+    disable_scale_in = false
+  }
 }
 
 resource "aws_lb" "myalb" {
