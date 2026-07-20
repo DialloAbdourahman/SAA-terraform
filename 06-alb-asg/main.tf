@@ -176,7 +176,7 @@ resource "aws_autoscaling_group" "auth_service_asg" {
 
   launch_template {
     id      = aws_launch_template.auth_service_lt.id
-    version = "$Latest"  
+    version = aws_launch_template.auth_service_lt.latest_version
   }
 
   vpc_zone_identifier = [aws_subnet.subnet_az_1a.id, aws_subnet.subnet_az_1b.id]
@@ -193,6 +193,15 @@ resource "aws_autoscaling_group" "auth_service_asg" {
   health_check_grace_period = 10    
 
   force_delete = true  
+
+  instance_refresh {
+    strategy = "Rolling"
+
+    preferences {
+      min_healthy_percentage = 100
+      instance_warmup        = 120
+    }
+  }
 }
 
 resource "aws_autoscaling_policy" "auth_service_target_tracking" {
