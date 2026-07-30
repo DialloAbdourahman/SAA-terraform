@@ -220,86 +220,91 @@ resource "aws_db_parameter_group" "mysql_secure" {
   }
 }
 
-resource "aws_db_instance" "my_db" {
-  # snapshot_identifier = "my-db-final-snapshot" To launch from a snapshot
+resource "aws_rds_cluster" "my_db" {
+  cluster_identifier      = "aurora-cluster-demo"
+  engine                  = "aurora-mysql"
+  engine_version          = "8.0.mysql_aurora.3.10.3"
 
-  allocated_storage    = 10
-  # So that it can perform autoscaling till 100GB
-  max_allocated_storage = 100 
+  #   Can let aurora handle the az in production by looking at the db subnet group. 
+  #   availability_zones      = ["eu-north-1a", "eu-north-1b", "eu-north-1c"]
 
-  # The subnets it should belong to, at least two subnet. 
+  database_name           = "mydb"
+  master_username         = "foo"
+  master_password         = "must_be_eight_characters"
+  backup_retention_period = 5
+
+  # Tell aurora to perform backup between this time as backup is quite heavy and it is better to choose a specific time where users don't use the database
+  preferred_backup_window = "07:00-09:00"
+
   db_subnet_group_name = aws_db_subnet_group.db_subnet_group.name
 
-  db_name              = "mydbterraform"
-  engine               = "mysql"
-  engine_version       = "8.0"
-  instance_class       = "db.t3.micro"
-
-  username             = "admin"
-  password             = "admin1234"
-
-  # parameter_group_name = "default.mysql8.0"
-  parameter_group_name = aws_db_parameter_group.mysql_secure.name
-
-  # Make it in such a way that when we are destroying the db, it should take a snapshot first
   skip_final_snapshot  = false
-  # The name of the final snapshot
-  final_snapshot_identifier = "my-db-final-snapshot-after-delete-final"
+  final_snapshot_identifier = "aurora-final-snapshot"
 
-  # So that terraform can create backups and it says that the backups can stay for 7 days. If it is 0, then no backup will be performed.
-  backup_retention_period = 7
-
-  # The SG of the DB
   vpc_security_group_ids = [
     aws_security_group.rds_sg.id
   ]
 
-  multi_az = true
-
-  // true = apply changes immediately (no maintenance window)
-  // false = apply during maintenance window
-  apply_immediately = true
-
   storage_encrypted = true
-  # kms_key_id = If you have your own key
 
   tags = {
     Name = "MyDB"
   }
 }
 
-resource "aws_db_instance" "my_db_replica" {
-  replicate_source_db = aws_db_instance.my_db.arn
-
-  instance_class = "db.t3.micro"
-
+resource "aws_rds_cluster_instance" "writer" {
+  identifier = "aurora-writer"
+  cluster_identifier = aws_rds_cluster.my_db.id
+  instance_class = "db.t3.medium"
+  engine = aws_rds_cluster.my_db.engine
   publicly_accessible = false
 
-  parameter_group_name = aws_db_parameter_group.mysql_secure.name
-
-  db_subnet_group_name = aws_db_subnet_group.db_subnet_group.name
-
-  vpc_security_group_ids = [
-    aws_security_group.rds_sg.id
-  ]
-
-  skip_final_snapshot = true
-  
   tags = {
-    Name = "MyDB Replica"
+    Name = "Aurora Writer"
   }
 }
 
-# sudo apt update
-# sudo apt install mysql-client -y
+resource "aws_rds_cluster_instance" "readers" {
+  count = 2
 
-# CREATE DATABASE users
+  identifier = "aurora-reader-${count.index + 1}"
+  cluster_identifier = aws_rds_cluster.my_db.id
+  instance_class = "db.t3.medium"
+  engine = aws_rds_cluster.my_db.engine
+  publicly_accessible = false
 
-# CREATE TABLE users (
-#     id INT AUTO_INCREMENT PRIMARY KEY,
-#     name VARCHAR(100) NOT NULL,
-#     email VARCHAR(255) NOT NULL UNIQUE
-# );
+  tags = {
+    Name = "Aurora Reader ${count.index + 1}"
+  }
+}
 
-# INSERT INTO users (name, email)
-# VALUES ('Diallo', 'diallo@example.com');
+# Define the Application Auto Scaling Target
+resource "aws_appautoscaling_target" "aurora_replica_target" {
+  max_capacity       = 15
+  min_capacity       = 1
+  resource_id        = "cluster:${aws_rds_cluster.my_db.id}"
+  scalable_dimension = "rds:cluster:ReadReplicaCount"
+  service_namespace  = "rds"
+}
+
+# Define the Target Tracking Scaling Policy
+resource "aws_appautoscaling_policy" "aurora_cpu_scaling_policy" {
+  name               = "aurora-reader-cpu-target-tracking"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.aurora_replica_target.resource_id
+  scalable_dimension = aws_appautoscaling_target.aurora_replica_target.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.aurora_replica_target.service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    # Scale when average CPU hits 70%
+    target_value       = 70.0    
+    # Wait 5 minutes before removing a replica
+    scale_in_cooldown  = 300                        
+    # Wait 3 minutes before adding a replica
+    scale_out_cooldown = 180                        
+
+    predefined_metric_specification {
+      predefined_metric_type = "RDSReaderAverageCPUUtilization"
+    }
+  }
+}
