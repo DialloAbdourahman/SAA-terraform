@@ -126,12 +126,12 @@ resource "aws_security_group" "ec2_sg" {
   }
 }
 
-resource "aws_security_group" "rds_sg" {
-  name        = "rds_sg"
+resource "aws_security_group" "redis_sg" {
+  name        = "redis_sg"
   vpc_id      = aws_vpc.myvpc.id
 
   tags = {
-    Name = "rds_sg"
+    Name = "redis_sg"
   }
 }
 
@@ -157,12 +157,12 @@ resource "aws_vpc_security_group_egress_rule" "ec2_allow_outbound" {
   ip_protocol       = "-1"
 }
 
-resource "aws_vpc_security_group_ingress_rule" "rds_allow_ec2_access" {
-  security_group_id = aws_security_group.rds_sg.id
+resource "aws_vpc_security_group_ingress_rule" "redis_allow_ec2_access" {
+  security_group_id = aws_security_group.redis_sg.id
   referenced_security_group_id = aws_security_group.ec2_sg.id
-  from_port         = 3306
+  from_port         = 6379
   ip_protocol       = "tcp"
-  to_port           = 3306
+  to_port           = 6379
 }
 
 resource "aws_instance" "ec2_public_subnet_az_1a" {
@@ -193,8 +193,8 @@ resource "aws_instance" "ec2_public_subnet_az_1b" {
   }
 }
 
-resource "aws_db_subnet_group" "db_subnet_group" {
-  name = "db-private-subnet-group"
+resource "aws_elasticache_subnet_group" "redis_subnet_group" {
+  name = "redis-private-subnet-group"
 
   subnet_ids = [
     aws_subnet.private_subnet_az_1a.id,
@@ -202,106 +202,30 @@ resource "aws_db_subnet_group" "db_subnet_group" {
   ]
 
   tags = {
-    Name = "DB private subnet group"
+    Name = "Redis private subnet group"
   }
 }
 
-resource "aws_db_parameter_group" "mysql_secure" {
-  name   = "mysql8-secure"
-  family = "mysql8.0"
+resource "aws_elasticache_cluster" "my_redis_cluster" {
+  cluster_id           = "cluster-example"
+  engine               = "redis"
+  node_type            = "cache.t4g.micro"
+  num_cache_nodes      = 1
+  parameter_group_name = "default.redis3.2"
+  engine_version       = "3.2.10"
+  port                 = 6379
 
-  parameter {
-    name  = "require_secure_transport"
-    value = "ON"
-  }
+  subnet_group_name = aws_elasticache_subnet_group.redis_subnet_group.name
 
-  tags = {
-    Name = "MySQL Secure Parameter Group"
-  }
-}
+  final_snapshot_identifier = "redis-final-snapshot"
 
-resource "aws_db_instance" "my_db" {
-  # snapshot_identifier = "my-db-final-snapshot" To launch from a snapshot
-
-  allocated_storage    = 10
-  # So that it can perform autoscaling till 100GB
-  max_allocated_storage = 100 
-
-  # The subnets it should belong to, at least two subnet. 
-  db_subnet_group_name = aws_db_subnet_group.db_subnet_group.name
-
-  db_name              = "mydbterraform"
-  engine               = "mysql"
-  engine_version       = "8.0"
-  instance_class       = "db.t3.micro"
-
-  username             = "admin"
-  password             = "admin1234"
-
-  # parameter_group_name = "default.mysql8.0"
-  parameter_group_name = aws_db_parameter_group.mysql_secure.name
-
-  # Make it in such a way that when we are destroying the db, it should take a snapshot first
-  skip_final_snapshot  = false
-  # The name of the final snapshot
-  final_snapshot_identifier = "my-db-final-snapshot-after-delete-final"
-
-  # So that terraform can create backups and it says that the backups can stay for 7 days. If it is 0, then no backup will be performed.
-  backup_retention_period = 7
-
-  # The SG of the DB
-  vpc_security_group_ids = [
-    aws_security_group.rds_sg.id
+  security_group_ids = [
+    aws_security_group.redis_sg.id
   ]
 
-  multi_az = true
-
-  // true = apply changes immediately (no maintenance window)
-  // false = apply during maintenance window
-  apply_immediately = true
-
-  storage_encrypted = true
-  # kms_key_id = If you have your own key
+  transit_encryption_enabled = true
 
   tags = {
-    Name = "MyDB"
+    Name = "MyRedisCluster"
   }
 }
-
-resource "aws_db_instance" "my_db_replica" {
-  replicate_source_db = aws_db_instance.my_db.arn
-
-  instance_class = "db.t3.micro"
-
-  publicly_accessible = false
-
-  parameter_group_name = aws_db_parameter_group.mysql_secure.name
-
-  db_subnet_group_name = aws_db_subnet_group.db_subnet_group.name
-
-  vpc_security_group_ids = [
-    aws_security_group.rds_sg.id
-  ]
-
-  skip_final_snapshot = true
-  
-  tags = {
-    Name = "MyDB Replica"
-  }
-}
-
-# sudo apt update
-# sudo apt install mysql-client -y
-
-# CREATE DATABASE users;
-
-# USE users;
-
-# CREATE TABLE users (
-#     id INT AUTO_INCREMENT PRIMARY KEY,
-#     name VARCHAR(100) NOT NULL,
-#     email VARCHAR(255) NOT NULL UNIQUE
-# );
-
-# INSERT INTO users (name, email)
-# VALUES ('Diallo', 'diallo@example.com');

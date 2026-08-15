@@ -308,3 +308,6 @@ resource "aws_appautoscaling_policy" "aurora_cpu_scaling_policy" {
     }
   }
 }
+
+# TRY TO SEE IF WE CAN RETRIEVE AND SAVE THE PASSWORD IN SECRETS MANAGER.
+# TRY TO LOOK AT THE RDS PROXY.
