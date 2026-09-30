@@ -281,7 +281,7 @@ resource "aws_rds_cluster_instance" "readers" {
 # Define the Application Auto Scaling Target
 resource "aws_appautoscaling_target" "aurora_replica_target" {
   max_capacity       = 15
-  min_capacity       = 1
+  min_capacity       = 2
   resource_id        = "cluster:${aws_rds_cluster.my_db.id}"
   scalable_dimension = "rds:cluster:ReadReplicaCount"
   service_namespace  = "rds"
@@ -309,5 +309,3 @@ resource "aws_appautoscaling_policy" "aurora_cpu_scaling_policy" {
   }
 }
 
-# TRY TO SEE IF WE CAN RETRIEVE AND SAVE THE PASSWORD IN SECRETS MANAGER.
-# TRY TO LOOK AT THE RDS PROXY.
