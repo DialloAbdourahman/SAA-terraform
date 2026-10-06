@@ -158,3 +158,27 @@ resource "aws_sqs_queue_policy" "terraform_queue_policy" {
     ]
   })
 }
+
+
+// ENCRYPTION STUFF
+
+# resource "aws_kms_key" "s3" {
+#   description             = "KMS key for S3 bucket encryption"
+#   deletion_window_in_days = 30
+# }
+
+# resource "aws_kms_alias" "s3" {
+#   name          = "alias/chopme-s3"
+#   target_key_id = aws_kms_key.s3.key_id
+# }
+
+# resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
+#   bucket = aws_s3_bucket.this.id
+
+#   rule {
+#     apply_server_side_encryption_by_default {
+#       sse_algorithm     = "aws:kms"
+#       kms_master_key_id = aws_kms_key.s3.arn
+#     }
+#   }
+# }
