@@ -145,7 +145,6 @@ resource "aws_iam_role_policy" "lambda_sqs_policy" {
     ]
   })
 }
-
 resource "aws_iam_role_policy" "lambda_s3_policy" {
   name = "lambda-s3-access-policy"
   role = aws_iam_role.lambda_execution_role.id
@@ -177,13 +176,11 @@ resource "aws_iam_role_policy" "lambda_s3_policy" {
     ]
   })
 }
-
 resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
   role = aws_iam_role.lambda_execution_role.name
 
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
-
 data "archive_file" "lambda_zip" {
   type        = "zip"
   source_dir  = "${path.module}/lambda-function"
