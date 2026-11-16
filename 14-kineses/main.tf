@@ -46,6 +46,7 @@ resource "aws_kinesis_firehose_delivery_stream" "extended_s3_stream" {
 
 resource "aws_s3_bucket" "bucket" {
   bucket = "tf-test-bucket-diallo-2001"
+  force_destroy = true
 }
 
 resource "aws_iam_role" "firehose_role" {
